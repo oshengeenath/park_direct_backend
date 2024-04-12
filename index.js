@@ -356,3 +356,34 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
+// ##########################################
+// ------------ PARKING SLOTS ---------------
+// ##########################################
+
+app.post("/admin/add-parking-slots", async (req, res) => {
+  try {
+    // Start transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    // Adding slots for A1 to A20
+    for (let i = 1; i <= 45; i++) {
+      const slotIdA = `S${i}`;
+      const newSlotA = new ParkingSlot({
+        slotId: slotIdA,
+        status: "available",
+      });
+      await newSlotA.save({ session });
+    }
+
+    // Commit the transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).send("Parking slots added successfully.");
+  } catch (error) {
+    console.error("Error adding parking slots:", error);
+    res.status(500).send("Failed to add parking slots.");
+  }
+});
