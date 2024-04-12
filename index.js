@@ -6,8 +6,13 @@ const jwt = require("jsonwebtoken");
 const { MongoClient, ObjectId } = require("mongodb");
 const mongoose = require("mongoose");
 const { Users, ParkingSlot, Booking } = require("./mongo");
+const { startScheduledTasks } = require("./scheduler");
 app.use(bodyParser.json());
 app.listen(8000, () => console.log("Server Up and running"));
+
+// automatically free up slots
+startScheduledTasks();
+
 // Transporter
 const transporter = nodemailer.createTransport({
   service: "gmail",
