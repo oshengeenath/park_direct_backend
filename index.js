@@ -2,13 +2,13 @@ const express = require("express");
 const app = express();
 const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
+const jwt = require("jsonwebtoken");
+
 const { MongoClient, ObjectId } = require("mongodb");
 const mongoose = require("mongoose");
 const { Users, ParkingSlot, Booking } = require("./mongo");
-
 app.use(bodyParser.json());
 app.listen(8000, () => console.log("Server Up and running"));
-
 // Transporter
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -19,16 +19,13 @@ const transporter = nodemailer.createTransport({
     pass: process.env.PASSWORD, // app password from gmail account
   },
 });
-
 // ##########################################
 // ----------------- AUTH -------------------
 // ##########################################
-
 // Send Email Address
 app.post("/auth/send-verification-email", async (req, res) => {
   try {
     const { email } = req.body;
-
     // Check if user already exists with the provided email
     const existingUser = await Users.findOne({ email });
     // If user already exists, return an error
@@ -39,7 +36,6 @@ app.post("/auth/send-verification-email", async (req, res) => {
     }
     // Create a verification code (you can use a library for generating codes)
     const verificationCode = generateVerificationCode();
-
     const fullname = "fullname";
     const mobilenum = "mobilenum";
     const password = "password";
@@ -47,7 +43,6 @@ app.post("/auth/send-verification-email", async (req, res) => {
     const userRole = "vehicleOwner";
     const resetToken = "resetToken";
     const resetTokenExpiry = "resetTokenExpiery";
-
     // Create a new user instance
     const user = new Users({
       fullname,
@@ -60,7 +55,6 @@ app.post("/auth/send-verification-email", async (req, res) => {
       resetToken,
       resetTokenExpiry,
     });
-
     await sendVerificationEmail(email, verificationCode);
     // Save the user to the database
     await user.save();
@@ -72,11 +66,9 @@ app.post("/auth/send-verification-email", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 // Verify Email Address
 app.post("/auth/verify-email", async (req, res) => {
   const { email, verificationCode } = req.body;
-
   try {
     // Find the user with the provided email and verification code
     const user = await Users.findOne({ email, verificationCode });
@@ -95,12 +87,10 @@ app.post("/auth/verify-email", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 // Register User
 app.put("/auth/register-user", async (req, res) => {
   try {
     const { email, fullname, mobilenum, password } = req.body;
-
     const user = await Users.findOne({ email });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -121,12 +111,10 @@ app.put("/auth/register-user", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 // Login Route
 app.post("/auth/login-user", async (req, res) => {
   try {
     const { email, password } = req.body;
-
     const user = await Users.findOne({ email });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -134,13 +122,21 @@ app.post("/auth/login-user", async (req, res) => {
     if (user.password !== password) {
       return res.status(401).json({ error: "Incorrect password" });
     }
-    res.status(200).json({ message: "Login successful" });
+
+    // User is valid, generate JWT token
+    const token = jwt.sign(
+      { userId: user._id }, // Payload
+      process.env.JWT_SECRET, // Secret key from environment variable or your secret key
+      { expiresIn: "1h" } // Options, e.g., token expiration
+    );
+
+    // Send the token to the client
+    res.status(200).json({ message: "Login successful", token });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 // Forgot Password
 app.put("/auth/forgot-password", async (req, res) => {
   try {
@@ -154,12 +150,9 @@ app.put("/auth/forgot-password", async (req, res) => {
     // Update user document with reset token and expiry time
     user.resetToken = resetToken;
     user.resetTokenExpiry = resetTokenExpiry;
-
     await user.save();
-
     // Send email with reset link
     await sendResetEmail(email, resetToken);
-
     res
       .status(200)
       .json({ message: "Reset code sent to your email successfully" });
@@ -168,7 +161,6 @@ app.put("/auth/forgot-password", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 // Reset Password
 app.post("/auth/reset-password", async (req, res) => {
   try {
@@ -187,22 +179,18 @@ app.post("/auth/reset-password", async (req, res) => {
     user.resetToken = "resetToken";
     user.resetTokenExpiry = "resetTokenExpiry";
     await user.save();
-
     res.status(200).json({ message: "Password reset successfully" });
   } catch (error) {
     console.error("Error resetting password:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 // ##########################################
 // ------------- AUTH METHODS ---------------
 // ##########################################
-
 function generateVerificationCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
-
 async function sendVerificationEmail(email, verificationCode) {
   // Mail Options
   const mailOptions = {
@@ -216,11 +204,9 @@ async function sendVerificationEmail(email, verificationCode) {
   };
   await transporter.sendMail(mailOptions);
 }
-
 function generateResetToken() {
   return Math.random().toString(36).substring(2, 10);
 }
-
 async function sendResetEmail(email, resetToken) {
   // Mail Options
   const mailOptions = {
@@ -235,13 +221,27 @@ async function sendResetEmail(email, resetToken) {
   await transporter.sendMail(mailOptions);
 }
 
+// middlewear
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (token == null) return res.sendStatus(401); // if there's no token
+
+  jwt.verify(token, "4f3c2a17753c23a3b6f9e2a9b841c061d6a8d5ea", (err, user) => {
+    if (err) return res.sendStatus(403); // if the token is not valid
+    req.user = user;
+    next();
+  });
+}
+
 // ##########################################
 // -------------- BOOKINGS ------------------
 // ##########################################
 
 // Part 1: for vehicleOwner
 
-app.post("/vehicleOwner/book-slot", async (req, res) => {
+app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
   const { bookingId, email, date, arrivalTime, leaveTime, vehicleNumber } =
     req.body;
 
@@ -253,7 +253,6 @@ app.post("/vehicleOwner/book-slot", async (req, res) => {
       leaveTime,
       vehicleNumber,
     });
-
     if (existingBooking) {
       return res.status(400).json({
         error:
@@ -261,7 +260,6 @@ app.post("/vehicleOwner/book-slot", async (req, res) => {
       });
     }
     const status = "pending";
-
     // Since there's no need to check individual slots, directly save booking details
     const newBooking = await Booking.create({
       bookingId,
@@ -272,7 +270,6 @@ app.post("/vehicleOwner/book-slot", async (req, res) => {
       vehicleNumber,
       status,
     });
-
     return res.json({
       message: "Slot booked successfully.",
       booking: newBooking,
@@ -282,11 +279,9 @@ app.post("/vehicleOwner/book-slot", async (req, res) => {
     return res.status(500).json({ error: "Internal server error." });
   }
 });
-
 // Retrieve all bookings for a specific email address
 app.get("/vehicleOwner/get-all-bookings/:email", async (req, res) => {
   const { email } = req.params;
-
   try {
     const bookings = await Booking.find({ email });
     return res.json(bookings);
@@ -295,9 +290,7 @@ app.get("/vehicleOwner/get-all-bookings/:email", async (req, res) => {
     return res.status(500).json({ error: "Internal server error." });
   }
 });
-
 // Part 2: for officer
-
 app.get("/officer/fetch-all-pending-requests", async (req, res) => {
   try {
     // Fetch all bookings where the status is 'pending'
@@ -308,19 +301,15 @@ app.get("/officer/fetch-all-pending-requests", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 app.post("/officer/confirm-booking-request", async (req, res) => {
   const { bookingId, parkingSlotId } = req.body;
-
   try {
     // Optional: Verify the parking slot is available before assigning
     const parkingSlot = await ParkingSlot.findById(parkingSlotId);
     if (!parkingSlot) {
       return res.status(404).json({ error: "Parking slot not found" });
     }
-
     // You might want to add additional checks here to ensure the slot is not already taken
-
     // Find the booking by ID and update its status to 'confirmed' along with assigning the parking slot
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,
@@ -330,14 +319,11 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
       },
       { new: true }
     );
-
     if (!updatedBooking) {
       return res.status(404).json({ error: "Booking not found" });
     }
-
     // Optional: Update the parking slot status to indicate it's now taken
     // This depends on how your ParkingSlot model is structured and if you track availability
-
     res.json({
       message: "Booking confirmed and parking slot assigned successfully",
       booking: updatedBooking,
@@ -347,7 +333,6 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 app.get("/officer/fetch-all-confirmed-bookings", async (req, res) => {
   try {
     // Fetch all bookings where the status is 'confirmed'
