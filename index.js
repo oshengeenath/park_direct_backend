@@ -321,6 +321,7 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
 
     // You might want to add additional checks here to ensure the slot is not already taken
 
+
     // Find the booking by ID and update its status to 'confirmed' along with assigning the parking slot
     const updatedBooking = await Booking.findByIdAndUpdate(
       bookingId,

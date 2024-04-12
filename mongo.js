@@ -123,9 +123,7 @@ async function initializeParkingSlots() {
     console.error("Error initializing parking slots:", error);
   }
 }
-
 //initializeParkingSlots();
-
 // Initialize parking slots at 00:00 AM every day
 cron.schedule(
   "0 0 * * *",
