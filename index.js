@@ -63,7 +63,7 @@ app.post("/auth/send-verification-email", async (req, res) => {
     // Save the user to the database
     await user.save();
     // Return success response
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(201).json({ message: "Verification code sent successfully" });
   } catch (error) {
     // Handle any errors that occur during registration
     console.error("Error registering user:", error);
