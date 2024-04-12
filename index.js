@@ -9,10 +9,8 @@ const { Users, ParkingSlot, Booking } = require("./mongo");
 const { startScheduledTasks } = require("./scheduler");
 app.use(bodyParser.json());
 app.listen(8000, () => console.log("Server Up and running"));
-
 // automatically free up slots
 startScheduledTasks();
-
 // Transporter
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -126,14 +124,32 @@ app.post("/auth/login-user", async (req, res) => {
     if (user.password !== password) {
       return res.status(401).json({ error: "Incorrect password" });
     }
+
+    // Exclude password and other sensitive info from the response
+    const userResponse = {
+      _id: user._id,
+      fullname: user.fullname,
+      email: user.email,
+      mobilenum: user.mobilenum,
+      // Include any other fields you want to return
+      // but ensure NOT to include the password or other sensitive info
+      IsVerified: user.IsVerified,
+      userRole: user.userRole,
+      // You might want to exclude resetToken and resetTokenExpiry as well
+      // Depending on your application's requirements
+    };
+
     // User is valid, generate JWT token
     const token = jwt.sign(
       { userId: user._id }, // Payload
       process.env.JWT_SECRET, // Secret key from environment variable or your secret key
       { expiresIn: "1h" } // Options, e.g., token expiration
     );
-    // Send the token to the client
-    res.status(200).json({ message: "Login successful", token });
+
+    // Send the user data and the token to the client
+    res
+      .status(200)
+      .json({ user: userResponse, token, message: "Login successful" });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -254,10 +270,8 @@ app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
           "This vehicle already has a booking for the specified date and time.",
       });
     }
-
     const status = "pending";
     const parkingSlotId = "parkingSlotId";
-
     // Since there's no need to check individual slots, directly save booking details
     const newBooking = await Booking.create({
       bookingId,
@@ -269,7 +283,6 @@ app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
       status,
       parkingSlotId,
     });
-
     return res.json({
       message: "Slot booked successfully.",
       booking: newBooking,
@@ -301,7 +314,6 @@ app.get("/officer/fetch-all-pending-requests", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 app.get("/officer/fetch-all-confirmed-bookings", async (req, res) => {
   try {
     // Fetch all bookings where the status is 'confirmed'
@@ -312,23 +324,19 @@ app.get("/officer/fetch-all-confirmed-bookings", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 app.post("/officer/confirm-booking-request", async (req, res) => {
   const { bookingId, parkingSlotId } = req.body;
-
   try {
     // Verify the parking slot is available before assigning
     const parkingSlot = await ParkingSlot.findOne({
       slotId: parkingSlotId,
       status: "available",
     });
-
     if (!parkingSlot) {
       return res
         .status(400)
         .json({ error: "Parking slot not found or is already booked" });
     }
-
     // Find the booking by bookingId and update its status to 'confirmed' along with assigning the parking slotId
     const updatedBooking = await Booking.findOneAndUpdate(
       { bookingId: bookingId },
@@ -341,7 +349,6 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
     if (!updatedBooking) {
       return res.status(404).json({ error: "Booking not found" });
     }
-
     // Update the parking slot status to 'booked' and link the bookingId
     await ParkingSlot.findOneAndUpdate(
       { slotId: parkingSlotId },
@@ -351,7 +358,6 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
       },
       { new: true }
     );
-
     res.json({
       message: "Booking confirmed and parking slot assigned successfully",
       booking: updatedBooking,
@@ -361,17 +367,14 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 // ##########################################
 // ------------ PARKING SLOTS ---------------
 // ##########################################
-
 app.post("/admin/add-parking-slots", async (req, res) => {
   try {
     // Start transaction
     const session = await mongoose.startSession();
     session.startTransaction();
-
     // Adding slots for A1 to A20
     for (let i = 1; i <= 45; i++) {
       const slotIdA = `S${i}`;
@@ -382,11 +385,9 @@ app.post("/admin/add-parking-slots", async (req, res) => {
       });
       await newSlotA.save({ session });
     }
-
     // Commit the transaction
     await session.commitTransaction();
     session.endSession();
-
     res.status(201).send("Parking slots added successfully.");
   } catch (error) {
     console.error("Error adding parking slots:", error);
