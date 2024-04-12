@@ -373,6 +373,7 @@ app.post("/admin/add-parking-slots", async (req, res) => {
       const newSlotA = new ParkingSlot({
         slotId: slotIdA,
         status: "available",
+        bookingId: "bookingId",
       });
       await newSlotA.save({ session });
     }
