@@ -47,7 +47,7 @@ const newUser = new mongoose.Schema({
 const bookingSchema = new mongoose.Schema({
   bookingId: { type: String, required: true },
   email: { type: String, required: true },
-  date: { type: Date, required: true },
+  date: { type: String, required: true },
   arrivalTime: { type: String, required: true },
   leaveTime: { type: String, required: true },
   vehicleNumber: { type: String, required: true },
