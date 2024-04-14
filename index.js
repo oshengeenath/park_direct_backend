@@ -333,7 +333,7 @@ app.get("/officer/fetch-all-confirmed-bookings", async (req, res) => {
 });
 
 app.post("/officer/confirm-booking-request", async (req, res) => {
-  const { bookingId, parkingSlotId } = req.body;
+  const { bookingId, parkingSlotId, date, arrivalTime, leaveTime } = req.body;
 
   try {
     const parkingSlot = await ParkingSlot.findOne({
@@ -352,6 +352,9 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
       {
         status: "confirmed",
         parkingSlotId: parkingSlotId,
+        date: date,
+        arrivalTime: arrivalTime,
+        leaveTime: leaveTime,
       },
       { new: true }
     );
