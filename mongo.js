@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 require("dotenv").config();
 const cron = require("node-cron");
+
 mongoose
   .connect(process.env.MONGODB_URL)
   .then(() => {
@@ -9,7 +10,7 @@ mongoose
   .catch((error) => {
     console.log("Failed", error);
   });
-// User Schema
+
 const newUser = new mongoose.Schema({
   fullname: {
     type: String,
@@ -43,7 +44,6 @@ const newUser = new mongoose.Schema({
   resetTokenExpiry: { type: String, required: true },
 });
 
-// Booking schema
 const bookingSchema = new mongoose.Schema({
   bookingId: { type: String, required: true },
   email: { type: String, required: true },
@@ -55,7 +55,6 @@ const bookingSchema = new mongoose.Schema({
   parkingSlotId: { type: String, required: true },
 });
 
-// Parking slot schema
 const parkingSlotSchema = new mongoose.Schema({
   slotId: { type: String, required: true, unique: true },
   status: { type: String, required: true, enum: ["available", "booked"] },
