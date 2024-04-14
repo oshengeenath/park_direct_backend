@@ -12,40 +12,30 @@ const { startScheduledTasks } = require("./scheduler");
 app.use(bodyParser.json());
 app.listen(8000, () => console.log("Server Up and running"));
 
-// automatically free up slots
 startScheduledTasks();
 
-// Transporter
 const transporter = nodemailer.createTransport({
   service: "gmail",
   port: 587,
   secure: false,
   auth: {
-    user: process.env.USERNAME, // sender gmail address
-    pass: process.env.PASSWORD, // app password from gmail account
+    user: process.env.USERNAME,
+    pass: process.env.PASSWORD,
   },
 });
 
-// ##########################################
-// ----------------- AUTH -------------------
-// ##########################################
-
-// Send Email Address
 app.post("/auth/send-verification-email", async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Check if user already exists with the provided email
     const existingUser = await Users.findOne({ email });
 
-    // If user already exists, return an error
     if (existingUser) {
       return res
         .status(400)
         .json({ error: "User with this email already exists" });
     }
 
-    // Create a verification code (you can use a library for generating codes)
     const verificationCode = generateVerificationCode();
 
     const fullname = "fullname";
@@ -56,7 +46,6 @@ app.post("/auth/send-verification-email", async (req, res) => {
     const resetToken = "resetToken";
     const resetTokenExpiry = "resetTokenExpiery";
 
-    // Create a new user instance
     const user = new Users({
       fullname,
       email,
@@ -71,24 +60,19 @@ app.post("/auth/send-verification-email", async (req, res) => {
 
     await sendVerificationEmail(email, verificationCode);
 
-    // Save the user to the database
     await user.save();
 
-    // Return success response
     res.status(201).json({ message: "Verification code sent successfully" });
   } catch (error) {
-    // Handle any errors that occur during registration
     console.error("Error registering user:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Verify Email Address
 app.post("/auth/verify-email", async (req, res) => {
   const { email, verificationCode } = req.body;
 
   try {
-    // Find the user with the provided email and verification code
     const user = await Users.findOne({ email, verificationCode });
 
     if (!user) {
@@ -97,11 +81,9 @@ app.post("/auth/verify-email", async (req, res) => {
         .json({ error: "User not found or verification code is incorrect" });
     }
 
-    // Update the Is_Verified field to true
     user.IsVerified = true;
     await user.save();
 
-    // Return success response
     res.json({ message: "Verification successful. User is now verified." });
   } catch (error) {
     console.error("Error verifying token:", error);
@@ -109,7 +91,6 @@ app.post("/auth/verify-email", async (req, res) => {
   }
 });
 
-// Register User
 app.put("/auth/register-user", async (req, res) => {
   try {
     const { email, fullname, mobilenum, password } = req.body;
@@ -138,7 +119,6 @@ app.put("/auth/register-user", async (req, res) => {
   }
 });
 
-// Login Route
 app.post("/auth/login-user", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -152,28 +132,20 @@ app.post("/auth/login-user", async (req, res) => {
       return res.status(401).json({ error: "Incorrect password" });
     }
 
-    // Exclude password and other sensitive info from the response
     const userResponse = {
       _id: user._id,
       fullname: user.fullname,
       email: user.email,
       mobilenum: user.mobilenum,
-      // Include any other fields you want to return
-      // but ensure NOT to include the password or other sensitive info
+
       IsVerified: user.IsVerified,
       userRole: user.userRole,
-      // You might want to exclude resetToken and resetTokenExpiry as well
-      // Depending on your application's requirements
     };
 
-    // User is valid, generate JWT token
-    const token = jwt.sign(
-      { userId: user._id }, // Payload
-      process.env.JWT_SECRET, // Secret key from environment variable or your secret key
-      { expiresIn: "1h" } // Options, e.g., token expiration
-    );
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
 
-    // Send the user data and the token to the client
     res
       .status(200)
       .json({ user: userResponse, token, message: "Login successful" });
@@ -183,7 +155,6 @@ app.post("/auth/login-user", async (req, res) => {
   }
 });
 
-// Forgot Password
 app.put("/auth/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
@@ -194,15 +165,13 @@ app.put("/auth/forgot-password", async (req, res) => {
     }
 
     const resetToken = generateResetToken();
-    const resetTokenExpiry = new Date(Date.now() + 3600000); // Token expires in 1 hour
+    const resetTokenExpiry = new Date(Date.now() + 3600000);
 
-    // Update user document with reset token and expiry time
     user.resetToken = resetToken;
     user.resetTokenExpiry = resetTokenExpiry;
 
     await user.save();
 
-    // Send email with reset link
     await sendResetEmail(email, resetToken);
 
     res
@@ -214,7 +183,6 @@ app.put("/auth/forgot-password", async (req, res) => {
   }
 });
 
-// Reset Password
 app.post("/auth/reset-password", async (req, res) => {
   try {
     const { email, resetToken, newPassword } = req.body;
@@ -224,14 +192,12 @@ app.post("/auth/reset-password", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Check if reset token is valid and not expired
     if (user.resetToken !== resetToken || user.resetTokenExpiry < Date.now()) {
       return res.status(400).json({ error: "Invalid or expired reset token" });
     }
 
-    // Update user password
     user.password = newPassword;
-    // Clear reset token and expiry
+
     user.resetToken = "resetToken";
     user.resetTokenExpiry = "resetTokenExpiry";
     await user.save();
@@ -243,16 +209,11 @@ app.post("/auth/reset-password", async (req, res) => {
   }
 });
 
-// ##########################################
-// ------------- AUTH METHODS ---------------
-// ##########################################
-
 function generateVerificationCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 async function sendVerificationEmail(email, verificationCode) {
-  // Mail Options
   const mailOptions = {
     from: {
       name: "Park Direct",
@@ -270,7 +231,6 @@ function generateResetToken() {
 }
 
 async function sendResetEmail(email, resetToken) {
-  // Mail Options
   const mailOptions = {
     from: {
       name: "Park Direct",
@@ -283,32 +243,24 @@ async function sendResetEmail(email, resetToken) {
   await transporter.sendMail(mailOptions);
 }
 
-// middlewear
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
-  if (token == null) return res.sendStatus(401); // if there's no token
+  if (token == null) return res.sendStatus(401);
 
   jwt.verify(token, "4f3c2a17753c23a3b6f9e2a9b841c061d6a8d5ea", (err, user) => {
-    if (err) return res.sendStatus(403); // if the token is not valid
+    if (err) return res.sendStatus(403);
     req.user = user;
     next();
   });
 }
-
-// ##########################################
-// -------------- BOOKINGS ------------------
-// ##########################################
-
-// Part 1: for vehicleOwner
 
 app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
   const { bookingId, email, date, arrivalTime, leaveTime, vehicleNumber } =
     req.body;
 
   try {
-    // Check if a booking already exists for the specified date and start time for any vehicle
     const existingBooking = await Booking.findOne({
       date,
       arrivalTime,
@@ -326,7 +278,6 @@ app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
     const status = "pending";
     const parkingSlotId = "parkingSlotId";
 
-    // Since there's no need to check individual slots, directly save booking details
     const newBooking = await Booking.create({
       bookingId,
       email,
@@ -348,7 +299,6 @@ app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
   }
 });
 
-// Retrieve all bookings for a specific email address
 app.get("/vehicleOwner/get-all-bookings/:email", async (req, res) => {
   const { email } = req.params;
 
@@ -362,11 +312,8 @@ app.get("/vehicleOwner/get-all-bookings/:email", async (req, res) => {
   }
 });
 
-// Part 2: for officer
-
 app.get("/officer/fetch-all-pending-requests", async (req, res) => {
   try {
-    // Fetch all bookings where the status is 'pending'
     const pendingBookings = await Booking.find({ status: "pending" });
     res.json(pendingBookings);
   } catch (error) {
@@ -377,7 +324,6 @@ app.get("/officer/fetch-all-pending-requests", async (req, res) => {
 
 app.get("/officer/fetch-all-confirmed-bookings", async (req, res) => {
   try {
-    // Fetch all bookings where the status is 'confirmed'
     const confirmedBookings = await Booking.find({ status: "confirmed" });
     res.json(confirmedBookings);
   } catch (error) {
@@ -390,7 +336,6 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
   const { bookingId, parkingSlotId } = req.body;
 
   try {
-    // Verify the parking slot is available before assigning
     const parkingSlot = await ParkingSlot.findOne({
       slotId: parkingSlotId,
       status: "available",
@@ -402,12 +347,11 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
         .json({ error: "Parking slot not found or is already booked" });
     }
 
-    // Find the booking by bookingId and update its status to 'confirmed' along with assigning the parking slotId
     const updatedBooking = await Booking.findOneAndUpdate(
       { bookingId: bookingId },
       {
         status: "confirmed",
-        parkingSlotId: parkingSlotId, // Assign the slotId directly
+        parkingSlotId: parkingSlotId,
       },
       { new: true }
     );
@@ -416,12 +360,11 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
       return res.status(404).json({ error: "Booking not found" });
     }
 
-    // Update the parking slot status to 'booked' and link the bookingId
     await ParkingSlot.findOneAndUpdate(
       { slotId: parkingSlotId },
       {
         status: "booked",
-        bookingId: bookingId, // Link the bookingId directly
+        bookingId: bookingId,
       },
       { new: true }
     );
@@ -436,17 +379,32 @@ app.post("/officer/confirm-booking-request", async (req, res) => {
   }
 });
 
-// ##########################################
-// ------------ PARKING SLOTS ---------------
-// ##########################################
+function getFormattedDate() {
+  const today = new Date();
+  const day = String(today.getDate()).padStart(2, "0");
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const year = today.getFullYear();
+
+  return `${year}-${month}-${day}`;
+}
+
+app.get("/officer/today-arrivals", async (req, res) => {
+  try {
+    const todayDate = getFormattedDate();
+
+    const todayArraivals = await Booking.find({ date: todayDate });
+    res.json(todayArraivals);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
 
 app.post("/admin/add-parking-slots", async (req, res) => {
   try {
-    // Start transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
-    // Adding slots for A1 to A20
     for (let i = 1; i <= 45; i++) {
       const slotIdA = `S${i}`;
       const newSlotA = new ParkingSlot({
@@ -457,7 +415,6 @@ app.post("/admin/add-parking-slots", async (req, res) => {
       await newSlotA.save({ session });
     }
 
-    // Commit the transaction
     await session.commitTransaction();
     session.endSession();
 
@@ -470,15 +427,12 @@ app.post("/admin/add-parking-slots", async (req, res) => {
 
 app.get("/officer/all-parking-slots", async (req, res) => {
   try {
-    // Fetch all parking slots from the database
     const parkingSlots = await ParkingSlot.find({});
 
-    // Check if we have parking slots
     if (parkingSlots.length === 0) {
       return res.status(404).json({ error: "No parking slots found" });
     }
 
-    // Return the parking slots
     res.json(parkingSlots);
   } catch (error) {
     console.error("Error fetching all parking slots:", error);
