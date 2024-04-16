@@ -22,7 +22,6 @@ const transporter = nodemailer.createTransport({
     rejectUnauthorized: false,
   },
 });
-
 app.post("/auth/send-verification-email", async (req, res) => {
   try {
     const { email } = req.body;
@@ -246,16 +245,13 @@ app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
     return res.status(500).json({ error: "Internal server error." });
   }
 });
-
 app.get(
   "/vehicleOwner/get-all-bookings/:email",
   authenticateToken,
   async (req, res) => {
     const { email } = req.params;
-
     try {
       const bookings = await Booking.find({ email });
-
       return res.json(bookings);
     } catch (error) {
       console.error(error);
@@ -263,7 +259,6 @@ app.get(
     }
   }
 );
-
 app.get(
   "/officer/fetch-all-pending-requests",
   authenticateToken,
@@ -277,7 +272,6 @@ app.get(
     }
   }
 );
-
 app.get(
   "/officer/fetch-all-confirmed-bookings",
   authenticateToken,
@@ -296,19 +290,16 @@ app.post(
   authenticateToken,
   async (req, res) => {
     const { bookingId, parkingSlotId, date, arrivalTime, leaveTime } = req.body;
-
     try {
       const parkingSlot = await ParkingSlot.findOne({
         slotId: parkingSlotId,
         status: "available",
       });
-
       if (!parkingSlot) {
         return res
           .status(400)
           .json({ error: "Parking slot not found or is already booked" });
       }
-
       const updatedBooking = await Booking.findOneAndUpdate(
         { bookingId: bookingId },
         {
@@ -320,11 +311,9 @@ app.post(
         },
         { new: true }
       );
-
       if (!updatedBooking) {
         return res.status(404).json({ error: "Booking not found" });
       }
-
       await ParkingSlot.findOneAndUpdate(
         { slotId: parkingSlotId },
         {
@@ -333,7 +322,6 @@ app.post(
         },
         { new: true }
       );
-
       res.json({
         message: "Booking confirmed and parking slot assigned successfully",
         booking: updatedBooking,
@@ -343,9 +331,7 @@ app.post(
       res.status(500).json({ error: "Internal server error." });
     }
   }
-
 );
-
 function getFormattedDate() {
   const today = new Date();
   const day = String(today.getDate()).padStart(2, "0");
@@ -353,11 +339,9 @@ function getFormattedDate() {
   const year = today.getFullYear();
   return `${year}-${month}-${day}`;
 }
-
 app.get("/officer/today-arrivals", authenticateToken, async (req, res) => {
   try {
     const todayDate = getFormattedDate();
-
     const todayArraivals = await Booking.find({ date: todayDate });
     res.json(todayArraivals);
   } catch (error) {
@@ -365,7 +349,6 @@ app.get("/officer/today-arrivals", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 app.post("/admin/add-parking-slots", authenticateToken, async (req, res) => {
   try {
     const session = await mongoose.startSession();
@@ -387,11 +370,9 @@ app.post("/admin/add-parking-slots", authenticateToken, async (req, res) => {
     res.status(500).send("Failed to add parking slots.");
   }
 });
-
 app.get("/officer/all-parking-slots", authenticateToken, async (req, res) => {
   try {
     const parkingSlots = await ParkingSlot.find({});
-
     if (parkingSlots.length === 0) {
       return res.status(404).json({ error: "No parking slots found" });
     }
@@ -401,3 +382,33 @@ app.get("/officer/all-parking-slots", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+app.post(
+  "/officer/deny-booking-request",
+  authenticateToken,
+  async (req, res) => {
+    const { bookingId } = req.body;
+
+    try {
+      const booking = await Booking.findOne({ bookingId });
+
+      if (!booking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      if (booking.status === "denied" || booking.status === "confirmed") {
+        return res
+          .status(409)
+          .json({ error: `Booking is already ${booking.status}` });
+      }
+
+      booking.status = "denied";
+      await booking.save();
+
+      res.json({ message: "Booking request has been denied successfully." });
+    } catch (error) {
+      console.error("Error denying the booking request:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
