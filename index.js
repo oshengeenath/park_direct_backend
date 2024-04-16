@@ -7,12 +7,9 @@ const { MongoClient, ObjectId } = require("mongodb");
 const mongoose = require("mongoose");
 const { Users, ParkingSlot, Booking } = require("./mongo");
 const { startScheduledTasks } = require("./scheduler");
-
 app.use(bodyParser.json());
 app.listen(3004, () => console.log("Server Up and running"));
-
 startScheduledTasks();
-
 const transporter = nodemailer.createTransport({
   service: "gmail",
   port: 587,
@@ -21,7 +18,11 @@ const transporter = nodemailer.createTransport({
     user: process.env.USERNAME,
     pass: process.env.PASSWORD,
   },
+  tls: {
+    rejectUnauthorized: false,
+  },
 });
+
 app.post("/auth/send-verification-email", async (req, res) => {
   try {
     const { email } = req.body;
@@ -245,77 +246,106 @@ app.post("/vehicleOwner/book-slot", authenticateToken, async (req, res) => {
     return res.status(500).json({ error: "Internal server error." });
   }
 });
-app.get("/vehicleOwner/get-all-bookings/:email", async (req, res) => {
-  const { email } = req.params;
-  try {
-    const bookings = await Booking.find({ email });
-    return res.json(bookings);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: "Internal server error." });
-  }
-});
-app.get("/officer/fetch-all-pending-requests", async (req, res) => {
-  try {
-    const pendingBookings = await Booking.find({ status: "pending" });
-    res.json(pendingBookings);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error." });
-  }
-});
-app.get("/officer/fetch-all-confirmed-bookings", async (req, res) => {
-  try {
-    const confirmedBookings = await Booking.find({ status: "confirmed" });
-    res.json(confirmedBookings);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error." });
-  }
-});
-app.post("/officer/confirm-booking-request", async (req, res) => {
-  const { bookingId, parkingSlotId, date, arrivalTime, leaveTime } = req.body;
-  try {
-    const parkingSlot = await ParkingSlot.findOne({
-      slotId: parkingSlotId,
-      status: "available",
-    });
-    if (!parkingSlot) {
-      return res
-        .status(400)
-        .json({ error: "Parking slot not found or is already booked" });
+
+app.get(
+  "/vehicleOwner/get-all-bookings/:email",
+  authenticateToken,
+  async (req, res) => {
+    const { email } = req.params;
+
+    try {
+      const bookings = await Booking.find({ email });
+
+      return res.json(bookings);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Internal server error." });
     }
-    const updatedBooking = await Booking.findOneAndUpdate(
-      { bookingId: bookingId },
-      {
-        status: "confirmed",
-        parkingSlotId: parkingSlotId,
-        date: date,
-        arrivalTime: arrivalTime,
-        leaveTime: leaveTime,
-      },
-      { new: true }
-    );
-    if (!updatedBooking) {
-      return res.status(404).json({ error: "Booking not found" });
-    }
-    await ParkingSlot.findOneAndUpdate(
-      { slotId: parkingSlotId },
-      {
-        status: "booked",
-        bookingId: bookingId,
-      },
-      { new: true }
-    );
-    res.json({
-      message: "Booking confirmed and parking slot assigned successfully",
-      booking: updatedBooking,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal server error." });
   }
-});
+);
+
+app.get(
+  "/officer/fetch-all-pending-requests",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const pendingBookings = await Booking.find({ status: "pending" });
+      res.json(pendingBookings);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+
+app.get(
+  "/officer/fetch-all-confirmed-bookings",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const confirmedBookings = await Booking.find({ status: "confirmed" });
+      res.json(confirmedBookings);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+app.post(
+  "/officer/confirm-booking-request",
+  authenticateToken,
+  async (req, res) => {
+    const { bookingId, parkingSlotId, date, arrivalTime, leaveTime } = req.body;
+
+    try {
+      const parkingSlot = await ParkingSlot.findOne({
+        slotId: parkingSlotId,
+        status: "available",
+      });
+
+      if (!parkingSlot) {
+        return res
+          .status(400)
+          .json({ error: "Parking slot not found or is already booked" });
+      }
+
+      const updatedBooking = await Booking.findOneAndUpdate(
+        { bookingId: bookingId },
+        {
+          status: "confirmed",
+          parkingSlotId: parkingSlotId,
+          date: date,
+          arrivalTime: arrivalTime,
+          leaveTime: leaveTime,
+        },
+        { new: true }
+      );
+
+      if (!updatedBooking) {
+        return res.status(404).json({ error: "Booking not found" });
+      }
+
+      await ParkingSlot.findOneAndUpdate(
+        { slotId: parkingSlotId },
+        {
+          status: "booked",
+          bookingId: bookingId,
+        },
+        { new: true }
+      );
+
+      res.json({
+        message: "Booking confirmed and parking slot assigned successfully",
+        booking: updatedBooking,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+
+);
+
 function getFormattedDate() {
   const today = new Date();
   const day = String(today.getDate()).padStart(2, "0");
@@ -323,9 +353,11 @@ function getFormattedDate() {
   const year = today.getFullYear();
   return `${year}-${month}-${day}`;
 }
-app.get("/officer/today-arrivals", async (req, res) => {
+
+app.get("/officer/today-arrivals", authenticateToken, async (req, res) => {
   try {
     const todayDate = getFormattedDate();
+
     const todayArraivals = await Booking.find({ date: todayDate });
     res.json(todayArraivals);
   } catch (error) {
@@ -333,7 +365,8 @@ app.get("/officer/today-arrivals", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-app.post("/admin/add-parking-slots", async (req, res) => {
+
+app.post("/admin/add-parking-slots", authenticateToken, async (req, res) => {
   try {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -354,9 +387,11 @@ app.post("/admin/add-parking-slots", async (req, res) => {
     res.status(500).send("Failed to add parking slots.");
   }
 });
-app.get("/officer/all-parking-slots", async (req, res) => {
+
+app.get("/officer/all-parking-slots", authenticateToken, async (req, res) => {
   try {
     const parkingSlots = await ParkingSlot.find({});
+
     if (parkingSlots.length === 0) {
       return res.status(404).json({ error: "No parking slots found" });
     }
