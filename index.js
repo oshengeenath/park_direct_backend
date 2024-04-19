@@ -289,7 +289,7 @@ app.post(
   "/officer/confirm-booking-request",
   authenticateToken,
   async (req, res) => {
-    const { bookingId, parkingSlotId, date } = req.body;
+    const { bookingId, parkingSlotId, date, arrivalTime, leaveTime } = req.body;
     try {
       // Check if the parking slot is available for the given date
       const isBooked = await ParkingSlot.findOne({
@@ -306,8 +306,13 @@ app.post(
       // Confirm the booking in the Booking model
       const updatedBooking = await Booking.findOneAndUpdate(
         { bookingId: bookingId },
-        { status: "confirmed", parkingSlotId: parkingSlotId, date: date },
-        { new: true }
+        {
+          status: "confirmed",
+          parkingSlotId: parkingSlotId,
+          date: date,
+          arrivalTime: arrivalTime,
+          leaveTime: leaveTime,
+        },
       );
 
       if (!updatedBooking) {
