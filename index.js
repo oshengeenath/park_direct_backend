@@ -351,7 +351,7 @@ app.post("/admin/add-parking-slots", authenticateToken, async (req, res) => {
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
-    for (let i = 1; i <= 45; i++) {
+    for (let i = 1; i <= 40; i++) {
       const slotIdA = `S${i}`;
       const newSlotA = new ParkingSlot({
         slotId: slotIdA,
