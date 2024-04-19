@@ -57,8 +57,7 @@ const bookingSchema = new mongoose.Schema({
 
 const parkingSlotSchema = new mongoose.Schema({
   slotId: { type: String, required: true, unique: true },
-  status: { type: String, required: true, enum: ["available", "booked"] },
-  bookingId: { type: String, reuired: true },
+  bookedDates: [{ bookingId: String, date: Date }], // Array of objects containing booking ID and date
 });
 
 const Users = mongoose.model("Users", newUser);

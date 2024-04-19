@@ -289,37 +289,35 @@ app.post(
   "/officer/confirm-booking-request",
   authenticateToken,
   async (req, res) => {
-    const { bookingId, parkingSlotId, date, arrivalTime, leaveTime } = req.body;
+    const { bookingId, parkingSlotId, date } = req.body;
     try {
-      const parkingSlot = await ParkingSlot.findOne({
+      // Check if the parking slot is available for the given date
+      const isBooked = await ParkingSlot.findOne({
         slotId: parkingSlotId,
-        status: "available",
+        "bookedDates.date": date, // Check if any booking already exists for the given date
       });
-      if (!parkingSlot) {
-        return res
-          .status(400)
-          .json({ error: "Parking slot not found or is already booked" });
+
+      if (isBooked) {
+        return res.status(400).json({
+          error: "Parking slot is already booked for the selected date",
+        });
       }
+
+      // Confirm the booking in the Booking model
       const updatedBooking = await Booking.findOneAndUpdate(
         { bookingId: bookingId },
-        {
-          status: "confirmed",
-          parkingSlotId: parkingSlotId,
-          date: date,
-          arrivalTime: arrivalTime,
-          leaveTime: leaveTime,
-        },
+        { status: "confirmed", parkingSlotId: parkingSlotId, date: date },
         { new: true }
       );
+
       if (!updatedBooking) {
         return res.status(404).json({ error: "Booking not found" });
       }
+
+      // Add the booking ID and date to the bookedDates array of the ParkingSlot
       await ParkingSlot.findOneAndUpdate(
         { slotId: parkingSlotId },
-        {
-          status: "booked",
-          bookingId: bookingId,
-        },
+        { $push: { bookedDates: { bookingId, date } } }, // Use $push to add to the array
         { new: true }
       );
       res.json({
@@ -350,24 +348,25 @@ app.get("/officer/today-arrivals", authenticateToken, async (req, res) => {
   }
 });
 app.post("/admin/add-parking-slots", authenticateToken, async (req, res) => {
+  const session = await mongoose.startSession();
   try {
-    const session = await mongoose.startSession();
     session.startTransaction();
     for (let i = 1; i <= 45; i++) {
       const slotIdA = `S${i}`;
       const newSlotA = new ParkingSlot({
         slotId: slotIdA,
-        status: "available",
-        bookingId: "bookingId",
+        bookedDates: [], // Initialize with an empty array, since no bookings initially
       });
       await newSlotA.save({ session });
     }
     await session.commitTransaction();
-    session.endSession();
     res.status(201).send("Parking slots added successfully.");
   } catch (error) {
     console.error("Error adding parking slots:", error);
+    await session.abortTransaction();
     res.status(500).send("Failed to add parking slots.");
+  } finally {
+    session.endSession();
   }
 });
 app.get("/officer/all-parking-slots", authenticateToken, async (req, res) => {
